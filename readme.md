@@ -1,0 +1,1 @@
+## bjj project to attempt to use machine learning to identify positions in bjj. starting with satoshi ishii new wave judo as video source, down scaling then labelling
