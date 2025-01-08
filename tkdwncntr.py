@@ -2,7 +2,7 @@ from ultralytics import YOLO
 import numpy as np
 import cv2
 model = YOLO('yolo11n-pose.pt')  # Load model
-result = model("../vids/and/testfoot2.mp4") 
+results = model("../vids/and/testfoot2.mp4") 
 def calculate_angle(a, b, c):
     """Calculate the angle between three points (a, b, c) representing (hip, knee, ankle)."""
     a, b, c = np.array(a), np.array(b), np.array(c)
@@ -18,12 +18,23 @@ def calculate_angle(a, b, c):
 
 takedown_count = 0
 previous_takedown_detected = False  # To track the state of the previous frame
+previous_frame_keypoints_detected = False
+takedown_delay_counter = 0  # Delay counter to prevent multiple counts within 100 frames
+DELAY_FRAMES = 100
 
-for frame_number, result in enumerate(result):
+for frame_number, result in enumerate(results):
     print(f"Processing frame: {frame_number}")
     frame_image = result.orig_img.copy()  # Retrieve the original frame image
     keypoints = result.keypoints.xy.numpy()  # Extract keypoints as NumPy array
     takedown_detected = False  # Reset takedown detection per frame
+
+    # Ignore frames with no keypoints for takedown counter
+    if len(keypoints) == 0 or np.isnan(keypoints).any():
+        previous_frame_keypoints_detected = False
+        takedown_delay_counter = max(takedown_delay_counter - 1, 0)
+        continue
+
+    current_frame_keypoints_detected = True
 
     for person in keypoints:
         head_y = person[0][1]
@@ -35,20 +46,9 @@ for frame_number, result in enumerate(result):
             np.isnan(right_knee).any() or np.isnan(right_hip).any() or np.isnan(right_ankle).any()):
             continue
 
-        # Draw keypoints on the frame
-        for point in [person[0], left_knee, left_hip, left_ankle, right_knee, right_hip, right_ankle]:
-            cv2.circle(frame_image, (int(point[0]), int(point[1])), 5, (0, 255, 0), -1)
-
         # Calculate the body orientation angle for both legs
         left_body_angle = calculate_angle(left_hip, left_knee, left_ankle)
         right_body_angle = calculate_angle(right_hip, right_knee, right_ankle)
-
-        if not np.isnan(left_body_angle):
-            cv2.putText(frame_image, f"L Angle: {int(left_body_angle)}", (int(left_hip[0]), int(left_hip[1]) - 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-        if not np.isnan(right_body_angle):
-            cv2.putText(frame_image, f"R Angle: {int(right_body_angle)}", (int(right_hip[0]), int(right_hip[1]) - 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
 
         # Takedown detected if both body angles are lower and head is closer to both knees
         if ((left_body_angle < 100 and right_body_angle < 100) and
@@ -56,18 +56,24 @@ for frame_number, result in enumerate(result):
             takedown_detected = True
             break  # Stop checking other people in the frame
 
-    # Only count a new takedown if the previous frame didn't detect one
-    if takedown_detected and not previous_takedown_detected:
+    # Only count a new takedown if the previous frame didn't detect one and keypoints were detected
+    # and the delay has passed
+    if takedown_detected and not previous_takedown_detected and previous_frame_keypoints_detected and takedown_delay_counter == 0:
         takedown_count += 1
+        takedown_delay_counter = DELAY_FRAMES
         cv2.putText(frame_image, f"Takedown Count: {takedown_count}", (50, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-
-    # Display the frame and keep it open until user closes it
-    cv2.imshow(f"Frame {frame_number}", frame_image)
-    cv2.waitKey(0)  # Wait for user input to move to the next frame
+        # Display the frame only when the takedown counter increments
+        cv2.imshow(f"Frame {frame_number}", frame_image)
+        cv2.waitKey(0)  # Wait for user input to move to the next frame
 
     # Update the previous frame's detection status
     previous_takedown_detected = takedown_detected
+    previous_frame_keypoints_detected = current_frame_keypoints_detected
+
+    # Decrease delay counter
+    if takedown_delay_counter > 0:
+        takedown_delay_counter -= 1
 
 cv2.destroyAllWindows()
 
