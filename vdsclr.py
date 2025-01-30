@@ -28,6 +28,6 @@ def reduce_resolution_to_240p(input_path, output_path):
         print(f"An error occurred: {e}")
 
 # Example usage
-input_video = "../vids/hd/v1.mp4"  # Replace with your input file path
-output_video = "../vids/and/v1and.mp4"  # Replace with your desired output file path
+input_video = "../vids/hd/testfoot3hd.mov"  # Replace with your input file path
+output_video = "../vids/and/testfoot3.mp4"  # Replace with your desired output file path
 reduce_resolution_to_240p(input_video, output_video)
